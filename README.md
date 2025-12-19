@@ -206,7 +206,7 @@ Simply import into: Transactions → Financial → Make Journal Entries → Impo
 
 ## Example Output
 
-### Deka Bank Contract
+### Acme Bank Contract
 
 **Input:**
 - Cash: $2,100,000 (paid 12/31/2025)
@@ -216,7 +216,7 @@ Simply import into: Transactions → Financial → Make Journal Entries → Impo
 **Output:**
 ```
 ==========================================
-ASC 606 ANALYSIS - DEKA BANK
+ASC 606 ANALYSIS - ACME BANK
 ==========================================
 
 Cash Received:           $2,100,000.00
@@ -255,7 +255,7 @@ TOTALS                               $ 330,807      $ 1,769,193
 DR  Cash                           $2,100,000
     CR  Contract Liability          $2,100,000
 
-To record up-front payment from Deka Bank
+To record up-front payment from Acme Bank
 ```
 
 **Key Point**: ONE contract liability (not separate financing component tracking)
@@ -575,12 +575,12 @@ assert abs(results['total_pv'] - 94_339.62) < 1
 ## Support
 
 ### Internal
-- **Dan deCoen, Controller**: dan@coder.com
-- **Accounting Team**: accounting@coder.com
+- **Controller**
+- **Accounting Team**
 
 ### External
-- **CBIZ Arc**: ASC 606 consulting
-- **Deloitte**: Audit team
+- **Consultants**: ASC 606 consulting
+- **Audit team**: Audit team
 
 ### GitHub Issues
 For bugs or feature requests:
@@ -632,11 +632,10 @@ For internal use only.
 ## Acknowledgments
 
 Developed by the Coder Finance Team with guidance from:
-- CBIZ Arc (ASC 606 technical accounting)
-- Deloitte (External audit)
+- Consultants (ASC 606 technical accounting)
 - Anthropic Claude (Code development assistance)
 
-Special thanks to Dan deCoen for technical accounting expertise and requirements definition.
+Special thanks for technical accounting expertise and requirements definition.
 
 ---
 
