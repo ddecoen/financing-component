@@ -68,7 +68,8 @@ If you cannot extract this information from the PDF, return:
   "error": "Could not extract contract details from PDF"
 }`;
 
-    // Claude has excellent PDF document understanding with vision
+    // Claude PDF support via beta API
+    // Using the Messages API with PDF beta feature
     const response = await anthropic.messages.create({
       model: 'claude-3-5-sonnet-20241022',
       max_tokens: 2000,
@@ -77,13 +78,13 @@ If you cannot extract this information from the PDF, return:
           role: 'user',
           content: [
             {
-              type: 'document',
+              type: 'document' as any, // TypeScript workaround for beta feature
               source: {
                 type: 'base64',
                 media_type: 'application/pdf',
                 data: base64Pdf,
               },
-            },
+            } as any,
             {
               type: 'text',
               text: prompt,
@@ -91,6 +92,8 @@ If you cannot extract this information from the PDF, return:
           ],
         },
       ],
+      // @ts-ignore - Beta feature for PDF support
+      betas: ['pdfs-2024-09-25'],
     });
 
     const extracted = response.content[0].type === 'text' ? response.content[0].text : null;
