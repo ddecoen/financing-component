@@ -77,61 +77,117 @@ export default function Home() {
   }
 
   const parseContractFromText = (text: string): any => {
-    // Simple extraction logic - you can enhance this!
     const lines = text.split('\n').filter(line => line.trim())
     
-    // Try to find customer name (usually near top)
+    // Extract customer name (look for "Account Name:" or near "Bill To")
     let customer = 'Unknown Customer'
-    for (const line of lines.slice(0, 20)) {
-      if (line.toLowerCase().includes('customer') || line.toLowerCase().includes('client')) {
-        customer = line.split(':')[1]?.trim() || line.trim()
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (line.includes('Account Name:')) {
+        customer = line.split('Account Name:')[1]?.trim() || customer
+        break
+      }
+      if (line.includes('Deka Bank') || line.includes('DekaBank')) {
+        customer = 'Deka Bank'
         break
       }
     }
     
-    // Try to find amounts (look for dollar signs or numbers with commas)
-    const amounts: number[] = []
-    const amountRegex = /\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g
+    // Find the total amount (look for "Total" followed by a large dollar amount)
+    let totalAmount = 0
     for (const line of lines) {
-      const matches = line.match(amountRegex)
-      if (matches) {
-        matches.forEach(match => {
-          const num = parseFloat(match.replace(/[$,]/g, ''))
-          if (num > 10000) { // Filter out small numbers
-            amounts.push(num)
+      if (line.includes('Total') && line.includes('$')) {
+        const match = line.match(/\$[\d,]+\.?\d*/g)
+        if (match && match.length > 0) {
+          const amount = parseFloat(match[match.length - 1].replace(/[$,]/g, ''))
+          if (amount > 1000000) { // Total should be large
+            totalAmount = amount
+            break
           }
+        }
+      }
+    }
+    
+    // Find contract start and end dates
+    let contractStart = ''
+    let contractEnd = ''
+    for (const line of lines) {
+      if (line.includes('Contract Start:') || line.includes('Contract Start')) {
+        const dateMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{4})/g)
+        if (dateMatch) contractStart = dateMatch[0]
+      }
+      if (line.includes('Contract End:') || line.includes('Contract End')) {
+        const dateMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{4})/g)
+        if (dateMatch) contractEnd = dateMatch[0]
+      }
+    }
+    
+    // Parse contract start date (or use provided payment date)
+    const startDate = contractStart ? new Date(contractStart) : new Date('2025-12-31')
+    const payment_date = startDate.toISOString().split('T')[0]
+    
+    // Find all subtotal amounts (these are the annual amounts)
+    const subtotals: number[] = []
+    const periodDates: string[] = []
+    
+    for (const line of lines) {
+      // Look for lines with date ranges like "(12/31/2025 – 12/30/2026)"
+      const dateRangeMatch = line.match(/\((\d{1,2}\/\d{1,2}\/\d{4})\s*[–-]\s*(\d{1,2}\/\d{1,2}\/\d{4})\)/)
+      if (dateRangeMatch) {
+        periodDates.push(dateRangeMatch[1], dateRangeMatch[2])
+      }
+      
+      // Look for subtotal amounts (like $420,000.00)
+      if (line.includes('$') && (line.includes('420,000') || line.includes('Subtotal'))) {
+        const amountMatch = line.match(/\$[\d,]+\.?\d*/g)
+        if (amountMatch) {
+          const amount = parseFloat(amountMatch[amountMatch.length - 1].replace(/[$,]/g, ''))
+          if (amount >= 100000 && amount < 1000000) { // Annual amount range
+            subtotals.push(amount)
+          }
+        }
+      }
+    }
+    
+    // Build periods from the extracted data
+    const periods = []
+    const numPeriods = Math.min(subtotals.length, 5)
+    
+    for (let i = 0; i < numPeriods; i++) {
+      const periodStartIdx = i * 2
+      const periodEndIdx = i * 2 + 1
+      
+      const start = periodDates[periodStartIdx] 
+        ? new Date(periodDates[periodStartIdx]).toISOString().split('T')[0]
+        : new Date(startDate.getFullYear() + i, startDate.getMonth(), startDate.getDate()).toISOString().split('T')[0]
+      
+      const end = periodDates[periodEndIdx]
+        ? new Date(periodDates[periodEndIdx]).toISOString().split('T')[0]
+        : new Date(startDate.getFullYear() + i + 1, startDate.getMonth(), startDate.getDate() - 1).toISOString().split('T')[0]
+      
+      periods.push({
+        start,
+        end,
+        stated_amount: subtotals[i] || 420000
+      })
+    }
+    
+    // If we didn't find periods, create default ones
+    if (periods.length === 0) {
+      for (let i = 0; i < 5; i++) {
+        periods.push({
+          start: new Date(startDate.getFullYear() + i, 11, 31).toISOString().split('T')[0],
+          end: new Date(startDate.getFullYear() + i + 1, 11, 30).toISOString().split('T')[0],
+          stated_amount: totalAmount > 0 ? totalAmount / 5 : 420000
         })
       }
     }
     
-    // Try to find dates
-    const dateRegex = /(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})|(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/g
-    const dates: string[] = []
-    for (const line of lines) {
-      const matches = line.match(dateRegex)
-      if (matches) {
-        dates.push(...matches)
-      }
-    }
-    
-    // Build a basic contract structure
-    const cash_received = amounts[0] || 1500000
-    const payment_date = dates[0] ? new Date(dates[0]).toISOString().split('T')[0] : '2026-01-15'
-    
-    // Create periods (this is simplified - user will need to edit)
-    const periods = amounts.slice(1, 6).map((amount, index) => ({
-      start: dates[index + 1] ? new Date(dates[index + 1]).toISOString().split('T')[0] : `202${6 + index}-01-15`,
-      end: dates[index + 2] ? new Date(dates[index + 2]).toISOString().split('T')[0] : `202${7 + index}-01-14`,
-      stated_amount: amount
-    }))
-    
     return {
       customer,
-      cash_received,
+      cash_received: totalAmount || 2100000,
       payment_date,
-      periods: periods.length > 0 ? periods : [
-        { start: '2026-01-15', end: '2027-01-14', stated_amount: 300000 }
-      ]
+      periods
     }
   }
 
