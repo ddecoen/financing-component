@@ -297,6 +297,97 @@ export default function Home() {
     URL.revokeObjectURL(url)
   }
 
+  const downloadJournalEntriesCSV = () => {
+    if (!results?.results?.journal_entries) {
+      alert('No journal entries available')
+      return
+    }
+
+    // Generate CSV content
+    const headers = ['Entry #', 'Date', 'Account', 'Debit', 'Credit', 'Memo']
+    const rows = [headers.join(',')]
+
+    results.results.journal_entries.forEach((entry: any) => {
+      const date = new Date(entry.date).toLocaleDateString('en-US')
+      const memo = entry.description.replace(/,/g, ';') // Replace commas in memo
+
+      // Add debit rows
+      entry.debits.forEach((debit: any) => {
+        rows.push([
+          entry.entry_num,
+          date,
+          debit.account,
+          debit.amount,
+          '',
+          memo
+        ].join(','))
+      })
+
+      // Add credit rows
+      entry.credits.forEach((credit: any) => {
+        rows.push([
+          entry.entry_num,
+          date,
+          credit.account,
+          '',
+          credit.amount,
+          memo
+        ].join(','))
+      })
+
+      // Add blank row for readability
+      rows.push('')
+    })
+
+    const csvContent = rows.join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'Journal_Entries.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadExcelReport = () => {
+    if (!results?.results) {
+      alert('No analysis results available')
+      return
+    }
+
+    // For now, download as CSV since we don't have Excel generation in frontend
+    // In future, could use a library like xlsx to generate actual Excel files
+    
+    const data = results.results
+    const rows = [
+      ['ASC 606 Analysis Report'],
+      [''],
+      ['Summary'],
+      ['Metric', 'Value'],
+      ['Stated Total', data.stated_total],
+      ['Cash Received', data.cash_received],
+      ['Present Value', data.present_value],
+      ['Financing Component', data.financing_component],
+      ['Financing %', `${(data.financing_percentage * 100).toFixed(2)}%`],
+      ['Significant?', data.is_significant ? 'YES' : 'NO'],
+      [''],
+      ['Revenue Allocation'],
+      ['License Revenue', data.license_revenue],
+      ['License Financing', data.license_financing],
+      ['Support Revenue', data.support_revenue],
+      ['Support Financing', data.support_financing],
+    ]
+
+    const csvContent = rows.map(row => row.join(',')).join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'ASC606_Analysis.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <main className="min-h-screen p-8 bg-gradient-to-b from-gray-50 to-gray-100">
       <div className="max-w-6xl mx-auto">
@@ -464,16 +555,16 @@ export default function Home() {
 
                 <div className="mt-6 space-y-2">
                   <button
-                    onClick={() => downloadFile(results.excel_file!, 'ASC606_Analysis.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
+                    onClick={downloadExcelReport}
                     className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition"
                   >
                     📊 Download Excel Report
                   </button>
                   <button
-                    onClick={() => downloadFile(results.csv_file!, 'Journal_Entries.csv', 'text/csv')}
+                    onClick={downloadJournalEntriesCSV}
                     className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition"
                   >
-                    📝 Download Journal Entries CSV
+                    📝 Download Journal Entries CSV ({results.results.journal_entries?.length || 0} entries)
                   </button>
                 </div>
               </div>
