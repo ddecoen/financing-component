@@ -25,6 +25,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate contract data
+    const validation = validateContractData(contract_data);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { success: false, error: validation.error, warnings: validation.warnings },
+        { status: 400 }
+      );
+    }
+
     // Perform calculations
     const results = calculateASC606(contract_data, discount_rate, license_pct);
 
@@ -32,7 +41,8 @@ export async function POST(request: NextRequest) {
       success: true,
       results,
       excel_file: '', // We'll handle file generation client-side or later
-      csv_file: ''
+      csv_file: '',
+      warnings: validation.warnings
     });
 
   } catch (error: any) {
@@ -44,19 +54,63 @@ export async function POST(request: NextRequest) {
   }
 }
 
+function validateContractData(contractData: ContractData) {
+  const warnings: string[] = [];
+  
+  // Check if cash_received matches sum of periods
+  const statedTotal = contractData.periods.reduce((sum, p) => sum + p.stated_amount, 0);
+  
+  // Cash received should be LESS than stated total (that's the whole point of financing component)
+  if (contractData.cash_received >= statedTotal) {
+    return {
+      valid: false,
+      error: `Cash received ($${contractData.cash_received.toLocaleString()}) should be LESS than stated total ($${statedTotal.toLocaleString()}). The cash_received is the upfront payment, and stated amounts are what would be paid over time.`,
+      warnings
+    };
+  }
+  
+  // Warn if cash received is much less than expected (might indicate wrong amount)
+  const expectedPV = statedTotal * 0.7; // Rough estimate with typical discount
+  if (contractData.cash_received < expectedPV) {
+    warnings.push(`Cash received ($${contractData.cash_received.toLocaleString()}) seems low compared to stated total ($${statedTotal.toLocaleString()}). Please verify the upfront payment amount.`);
+  }
+  
+  // Check for unrealistic dates
+  contractData.periods.forEach((period, index) => {
+    const startYear = parseInt(period.start.split('-')[0]);
+    const endYear = parseInt(period.end.split('-')[0]);
+    
+    if (startYear > 2100 || endYear > 2100) {
+      warnings.push(`Period ${index + 1} has unrealistic year (${startYear} or ${endYear}). Please check date format.`);
+    }
+  });
+  
+  return { valid: true, warnings };
+}
+
 function calculateASC606(contractData: ContractData, discountRate: number, licensePct: number) {
   const supportPct = 1 - licensePct;
   const periods = contractData.periods;
   
-  // Calculate present value
-  let totalPV = 0;
+  // The cash_received is the PRESENT VALUE (what was paid upfront)
+  // The stated amounts are what the customer would have paid over time
+  const cashReceived = contractData.cash_received;
+  const statedTotal = periods.reduce((sum, p) => sum + p.stated_amount, 0);
+  
+  // Present Value = Cash Received (what was actually paid upfront)
+  // Financing Component = Stated Total - Present Value
+  const totalPV = cashReceived;
+  const financingComponent = statedTotal - cashReceived;
+  const financingPercentage = financingComponent / statedTotal;
+  const isSignificant = financingPercentage > 0.05;
+  
+  // Calculate PV analysis per period for documentation
   const pvAnalysis = periods.map((period, index) => {
-    const years = index + 1; // Simple: 1, 2, 3, 4, 5...
+    const years = index + 1;
     const stated = period.stated_amount;
+    // Discount each period's stated amount to present value
     const pv = stated / Math.pow(1 + discountRate, years);
     const financing = stated - pv;
-    
-    totalPV += pv;
     
     return {
       period: index + 1,
@@ -68,11 +122,6 @@ function calculateASC606(contractData: ContractData, discountRate: number, licen
       financing_component: Math.round(financing * 100) / 100
     };
   });
-
-  const statedTotal = periods.reduce((sum, p) => sum + p.stated_amount, 0);
-  const financingComponent = statedTotal - totalPV;
-  const financingPercentage = financingComponent / statedTotal;
-  const isSignificant = financingPercentage > 0.05;
 
   // Allocate to License and Support
   const licenseRevenue = totalPV * licensePct;
