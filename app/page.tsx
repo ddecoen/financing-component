@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import axios from 'axios'
 
 interface ContractPeriod {
@@ -29,8 +29,10 @@ export default function Home() {
   const [discountRate, setDiscountRate] = useState('0.06')
   const [licensePct, setLicensePct] = useState('0.20')
   const [loading, setLoading] = useState(false)
+  const [uploadingPdf, setUploadingPdf] = useState(false)
   const [results, setResults] = useState<AnalysisResults | null>(null)
   const [error, setError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Example contract for demo
   const exampleContract = {
@@ -48,6 +50,56 @@ export default function Home() {
 
   const loadExample = () => {
     setContractJson(JSON.stringify(exampleContract, null, 2))
+  }
+
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.type !== 'application/pdf') {
+      setError('Please upload a PDF file')
+      return
+    }
+
+    setError('')
+    setUploadingPdf(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await axios.post('/api/parse-pdf', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+
+      if (response.data.success && response.data.contract_data) {
+        // Populate the JSON textarea with extracted data
+        setContractJson(JSON.stringify(response.data.contract_data, null, 2))
+        setError('')
+        alert(response.data.message || 'Contract extracted! Please review and edit if needed.')
+      } else {
+        setError(response.data.message || response.data.error || 'Failed to extract contract data')
+        if (response.data.rawText) {
+          console.log('Raw AI response:', response.data.rawText)
+        }
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to process PDF'
+      setError(errorMsg)
+      console.error('PDF upload error:', err)
+    } finally {
+      setUploadingPdf(false)
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click()
   }
 
   const handleAnalyze = async () => {
@@ -102,6 +154,32 @@ export default function Home() {
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-2xl font-semibold mb-4">Contract Details</h2>
             
+            {/* PDF Upload Section */}
+            <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-200 border-dashed rounded-lg">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                onChange={handlePdfUpload}
+                className="hidden"
+              />
+              <div className="text-center">
+                <svg className="mx-auto h-12 w-12 text-blue-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <button
+                  onClick={triggerFileUpload}
+                  disabled={uploadingPdf}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition font-semibold"
+                >
+                  {uploadingPdf ? '📄 Processing PDF...' : '📄 Upload PDF Contract'}
+                </button>
+                <p className="mt-2 text-xs text-gray-600">
+                  AI will extract contract details automatically
+                </p>
+              </div>
+            </div>
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Contract JSON
@@ -110,7 +188,7 @@ export default function Home() {
                 className="w-full h-64 p-3 border border-gray-300 rounded-md font-mono text-sm"
                 value={contractJson}
                 onChange={(e) => setContractJson(e.target.value)}
-                placeholder="Paste contract JSON here..."
+                placeholder="Paste contract JSON here or upload PDF above..."
               />
               <button
                 onClick={loadExample}
@@ -251,11 +329,21 @@ export default function Home() {
         <div className="mt-8 bg-white rounded-lg shadow-lg p-6">
           <h3 className="text-xl font-semibold mb-4">How to Use</h3>
           <ol className="list-decimal list-inside space-y-2 text-gray-700">
-            <li>Click "Load Example Contract" or paste your own contract JSON</li>
+            <li><strong>📄 Upload a PDF contract</strong> (AI will extract details automatically) OR manually enter JSON</li>
+            <li>Click "Load Example Contract" to see the JSON format</li>
+            <li>Review and adjust the extracted/entered contract data if needed</li>
             <li>Adjust discount rate (default 6%) and license allocation percentage (default 20%)</li>
             <li>Click "Analyze Contract" to run the ASC 606 calculations</li>
             <li>Review the results and download Excel workpapers or CSV journal entries</li>
           </ol>
+          
+          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
+            <p className="text-sm text-yellow-800">
+              <strong>⚙️ Setup Required for PDF Upload:</strong> Add your OpenAI API key to Vercel environment variables 
+              (Settings → Environment Variables → <code className="bg-yellow-100 px-1 rounded">OPENAI_API_KEY</code>). 
+              Without this, you can still use manual JSON entry.
+            </p>
+          </div>
           
           <div className="mt-4 p-4 bg-blue-50 rounded">
             <h4 className="font-semibold mb-2">Contract JSON Format:</h4>
