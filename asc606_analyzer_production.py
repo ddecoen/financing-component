@@ -461,6 +461,132 @@ class ASC606FinancingAnalyzer:
         df.to_csv(filename, index=False)
         
         print(f"✓ Exported journal entries to: {filename}")
+    
+    def export_to_excel_buffer(self, buffer):
+        """Export analysis to Excel file in a BytesIO buffer for web API"""
+        if not self.results:
+            self.analyze()
+        
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            # Summary sheet
+            summary_data = {
+                'Metric': [
+                    'Customer',
+                    'Cash Received',
+                    'Stated Contract Value',
+                    'Present Value',
+                    'Financing Component',
+                    'Financing %',
+                    '',
+                    'License Allocation %',
+                    'License Revenue',
+                    'License Financing',
+                    '',
+                    'Support Allocation %',
+                    'Support Revenue',
+                    'Support Financing',
+                    '',
+                    'Discount Rate',
+                    'Is Significant?'
+                ],
+                'Value': [
+                    self.contract_data['customer'],
+                    self.contract_data['cash_received'],
+                    self.results['stated_total'],
+                    self.results['present_value'],
+                    self.results['financing_component'],
+                    f"{self.results['financing_percentage']:.2%}",
+                    '',
+                    f"{self.license_pct:.0%}",
+                    self.results['license_revenue'],
+                    self.results['license_financing'],
+                    '',
+                    f"{self.support_pct:.0%}",
+                    self.results['support_revenue'],
+                    self.results['support_financing'],
+                    '',
+                    f"{self.discount_rate:.1%}",
+                    'YES' if self.results['is_significant'] else 'NO'
+                ]
+            }
+            df_summary = pd.DataFrame(summary_data)
+            df_summary.to_excel(writer, sheet_name='Summary', index=False)
+            
+            # PV Analysis
+            df_pv = pd.DataFrame(self.results['pv_analysis'])
+            df_pv.to_excel(writer, sheet_name='PV Analysis', index=False)
+            
+            # License Schedule
+            df_lic = pd.DataFrame(self.results['license_schedule'])
+            df_lic.to_excel(writer, sheet_name='License Schedule', index=False)
+            
+            # Support Schedule
+            df_sup = pd.DataFrame(self.results['support_schedule'])
+            df_sup.to_excel(writer, sheet_name='Support Schedule', index=False)
+            
+            # Journal Entries
+            je_data = []
+            for entry in self.results['journal_entries']:
+                je_data.append({
+                    'Entry #': entry['entry_num'],
+                    'Date': entry['date'].strftime('%Y-%m-%d'),
+                    'Description': entry['description'],
+                    'Account': '',
+                    'Debit': '',
+                    'Credit': ''
+                })
+                
+                for debit in entry['debits']:
+                    je_data.append({
+                        'Entry #': '', 'Date': '', 'Description': '',
+                        'Account': debit['account'],
+                        'Debit': debit['amount'],
+                        'Credit': ''
+                    })
+                
+                for credit in entry['credits']:
+                    je_data.append({
+                        'Entry #': '', 'Date': '', 'Description': '',
+                        'Account': credit['account'],
+                        'Debit': '',
+                        'Credit': credit['amount']
+                    })
+                
+                je_data.append({'Entry #': '', 'Date': '', 'Description': '', 'Account': '', 'Debit': '', 'Credit': ''})
+            
+            df_je = pd.DataFrame(je_data)
+            df_je.to_excel(writer, sheet_name='Journal Entries', index=False)
+    
+    def export_journal_entries_buffer(self, buffer):
+        """Export journal entries to CSV buffer for web API"""
+        if 'journal_entries' not in self.results:
+            self.analyze()
+        
+        csv_data = []
+        
+        for entry in self.results['journal_entries']:
+            date_str = entry['date'].strftime('%m/%d/%Y')
+            
+            for debit in entry['debits']:
+                csv_data.append({
+                    'Date': date_str,
+                    'Account': debit['account'],
+                    'Debit': debit['amount'],
+                    'Credit': '',
+                    'Memo': entry['description']
+                })
+            
+            for credit in entry['credits']:
+                csv_data.append({
+                    'Date': date_str,
+                    'Account': credit['account'],
+                    'Debit': '',
+                    'Credit': credit['amount'],
+                    'Memo': entry['description']
+                })
+        
+        df = pd.DataFrame(csv_data)
+        df.to_csv(buffer, index=False)
 
 
 def analyze_deka_bank():
