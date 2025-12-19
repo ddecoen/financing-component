@@ -339,8 +339,9 @@ export default function Home() {
           
           <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
             <p className="text-sm text-yellow-800">
-              <strong>⚙️ Setup Required for PDF Upload:</strong> Add your OpenAI API key to Vercel environment variables 
-              (Settings → Environment Variables → <code className="bg-yellow-100 px-1 rounded">OPENAI_API_KEY</code>). 
+              <strong>⚙️ Setup Required for PDF Upload:</strong> Add your Anthropic Claude API key to Vercel environment variables 
+              (Settings → Environment Variables → <code className="bg-yellow-100 px-1 rounded">ANTHROPIC_API_KEY</code>). 
+              Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" className="underline">console.anthropic.com</a>.
               Without this, you can still use manual JSON entry.
             </p>
           </div>

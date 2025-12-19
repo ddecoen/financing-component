@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
-// Initialize OpenAI (you'll need to add OPENAI_API_KEY to Vercel env vars)
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+// Initialize Claude (you'll need to add ANTHROPIC_API_KEY to Vercel env vars)
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 }) : null;
 
 export async function POST(request: NextRequest) {
@@ -25,21 +25,22 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Convert PDF to base64 for OpenAI
+    // Convert PDF to base64 for Claude
     const base64Pdf = buffer.toString('base64');
 
-    if (!openai) {
+    if (!anthropic) {
       return NextResponse.json({
         success: false,
-        error: 'OpenAI API key not configured. Please add OPENAI_API_KEY to your Vercel environment variables.',
+        error: 'Anthropic API key not configured. Please add ANTHROPIC_API_KEY to your Vercel environment variables.',
         fallbackMessage: 'Please manually enter your contract details in JSON format for now.'
       }, { status: 503 });
     }
 
-    // Use OpenAI to extract contract data
-    const prompt = `You are a financial analyst extracting contract information from a PDF. 
-    
-Extract the following information and return ONLY a valid JSON object with this exact structure:
+    // Use Claude to extract contract data from PDF
+    const prompt = `You are a financial analyst extracting contract information from a PDF document. 
+
+Analyze the PDF and extract the following information. Return ONLY a valid JSON object with this exact structure:
+
 {
   "customer": "Company Name",
   "cash_received": 1500000,
@@ -53,39 +54,46 @@ Extract the following information and return ONLY a valid JSON object with this 
   ]
 }
 
-Important:
-- Extract the customer/client name
+Important requirements:
+- Extract the customer/client company name
 - Find the total upfront payment amount (cash_received)
-- Identify the payment date
-- Extract all contract periods with start dates, end dates, and amounts
+- Identify the payment date when cash was/will be received
+- Extract ALL contract periods with their start dates, end dates, and stated amounts
 - Use YYYY-MM-DD format for all dates
-- All amounts should be numbers (no currency symbols)
-- Return ONLY the JSON, no additional text
+- All amounts should be numbers only (no currency symbols, no commas)
+- Return ONLY the JSON object, no additional text or explanation
 
-If you cannot extract this information, return:
+If you cannot extract this information from the PDF, return:
 {
   "error": "Could not extract contract details from PDF"
 }`;
 
-    // Note: GPT-4 Vision or GPT-4-turbo with PDF support would be ideal
-    // For now, we'll provide a manual entry option
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    // Claude has excellent PDF document understanding with vision
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 2000,
       messages: [
         {
-          role: 'system',
-          content: 'You are a financial contract analyzer. Extract structured data from contract text.'
-        },
-        {
           role: 'user',
-          content: `${prompt}\n\nPlease analyze this PDF file and extract the contract information. Note: If you cannot process the PDF directly, please respond with an error message asking the user to copy and paste the contract text.`
-        }
+          content: [
+            {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: base64Pdf,
+              },
+            },
+            {
+              type: 'text',
+              text: prompt,
+            },
+          ],
+        },
       ],
-      temperature: 0.1,
-      max_tokens: 1000,
     });
 
-    const extracted = response.choices[0].message.content;
+    const extracted = response.content[0].type === 'text' ? response.content[0].text : null;
     
     if (!extracted) {
       throw new Error('No response from AI');
