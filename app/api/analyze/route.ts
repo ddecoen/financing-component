@@ -229,50 +229,80 @@ function generateJournalEntries(
   supportSchedule: any[]
 ) {
   const entries = [];
+  const cashReceived = contractData.cash_received;
+  const numPeriods = contractData.periods.length;
+  const monthsPerPeriod = 12;
+  const totalMonths = numPeriods * monthsPerPeriod;
 
-  // Initial entry
+  // Entry 1: Day 1 - Record cash receipt and deferred revenue
   entries.push({
     entry_num: 1,
     date: new Date(contractData.payment_date),
-    description: `Initial recognition - ${contractData.customer}`,
+    description: `Day 1 - Cash receipt and deferred revenue - ${contractData.customer}`,
     debits: [
-      { account: 'Cash', amount: contractData.cash_received }
+      { account: 'Accounts Receivable (or Cash)', amount: cashReceived }
     ],
     credits: [
-      { account: 'Deferred Revenue - License', amount: Math.round(licenseRevenue * 100) / 100 },
-      { account: 'Deferred Revenue - Support', amount: Math.round(supportRevenue * 100) / 100 },
-      { account: 'Contract Liability - Financing', amount: Math.round(financingComponent * 100) / 100 }
+      { account: 'Deferred Revenue', amount: cashReceived }
     ]
   });
 
-  // Add recognition entries for each period (simplified)
-  licenseSchedule.forEach((period, index) => {
+  // Entry 2: Day 1 - Recognize License Revenue (20% of transaction price)
+  const licenseAmount = totalPV * 0.20; // License is 20% of PV (transaction price)
+  entries.push({
+    entry_num: 2,
+    date: new Date(contractData.payment_date),
+    description: `Day 1 - Recognize License Revenue (20% of transaction price)`,
+    debits: [
+      { account: 'Deferred Revenue', amount: Math.round(licenseAmount * 100) / 100 }
+    ],
+    credits: [
+      { account: 'License Revenue', amount: Math.round(licenseAmount * 100) / 100 }
+    ]
+  });
+
+  // Monthly entries for Support Revenue (80% of PV recognized ratably)
+  const monthlySupportRevenue = (totalPV * 0.80) / totalMonths;
+  
+  // Monthly entries for Interest Income (financing component recognized over time)
+  const monthlyInterestIncome = financingComponent / totalMonths;
+
+  // Generate monthly entries for each month of the contract
+  const startDate = new Date(contractData.payment_date);
+  
+  for (let month = 1; month <= totalMonths; month++) {
+    const entryDate = new Date(startDate);
+    entryDate.setMonth(entryDate.getMonth() + month);
+    
+    const periodNum = Math.ceil(month / monthsPerPeriod);
+    const monthInPeriod = ((month - 1) % monthsPerPeriod) + 1;
+
+    // Monthly Support Revenue Recognition
     entries.push({
       entry_num: entries.length + 1,
-      date: new Date(period.end_date),
-      description: `Period ${period.period} - License Revenue Recognition`,
+      date: entryDate,
+      description: `Month ${month} (Period ${periodNum}, Month ${monthInPeriod}) - Support Revenue Recognition`,
       debits: [
-        { account: 'Deferred Revenue - License', amount: period.revenue_recognized }
+        { account: 'Deferred Revenue', amount: Math.round(monthlySupportRevenue * 100) / 100 }
       ],
       credits: [
-        { account: 'License Revenue', amount: period.revenue_recognized }
+        { account: 'Support Revenue', amount: Math.round(monthlySupportRevenue * 100) / 100 }
       ]
     });
 
-    if (period.interest_income > 0) {
-      entries.push({
-        entry_num: entries.length + 1,
-        date: new Date(period.end_date),
-        description: `Period ${period.period} - Interest Income on License`,
-        debits: [
-          { account: 'Contract Liability - Financing', amount: period.interest_income }
-        ],
-        credits: [
-          { account: 'Interest Income', amount: period.interest_income }
-        ]
-      });
-    }
-  });
+    // Monthly Interest Income Recognition
+    entries.push({
+      entry_num: entries.length + 1,
+      date: entryDate,
+      description: `Month ${month} (Period ${periodNum}, Month ${monthInPeriod}) - Interest Income Recognition`,
+      debits: [
+        { account: 'Deferred Revenue (Contract Liability)', amount: Math.round(monthlyInterestIncome * 100) / 100 }
+      ],
+      credits: [
+        { account: 'Interest Income', amount: Math.round(monthlyInterestIncome * 100) / 100 }
+      ]
+    });
+  }
 
   return entries;
 }
