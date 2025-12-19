@@ -57,22 +57,22 @@ export async function POST(request: NextRequest) {
 function validateContractData(contractData: ContractData) {
   const warnings: string[] = [];
   
-  // Check if cash_received matches sum of periods
-  const statedTotal = contractData.periods.reduce((sum, p) => sum + p.stated_amount, 0);
-  
-  // Cash received should be LESS than stated total (that's the whole point of financing component)
-  if (contractData.cash_received >= statedTotal) {
+  // Check if periods exist
+  if (!contractData.periods || contractData.periods.length === 0) {
     return {
       valid: false,
-      error: `Cash received ($${contractData.cash_received.toLocaleString()}) should be LESS than stated total ($${statedTotal.toLocaleString()}). The cash_received is the upfront payment, and stated amounts are what would be paid over time.`,
+      error: 'No contract periods defined',
       warnings
     };
   }
   
-  // Warn if cash received is much less than expected (might indicate wrong amount)
-  const expectedPV = statedTotal * 0.7; // Rough estimate with typical discount
-  if (contractData.cash_received < expectedPV) {
-    warnings.push(`Cash received ($${contractData.cash_received.toLocaleString()}) seems low compared to stated total ($${statedTotal.toLocaleString()}). Please verify the upfront payment amount.`);
+  const statedTotal = contractData.periods.reduce((sum, p) => sum + p.stated_amount, 0);
+  
+  // For ASC 606, cash_received can be equal to stated total (no discount)
+  // or less than stated total (if discounted)
+  // But it should generally be close
+  if (contractData.cash_received > statedTotal * 1.1) {
+    warnings.push(`Cash received ($${contractData.cash_received.toLocaleString()}) is more than 10% higher than stated total ($${statedTotal.toLocaleString()}). Please verify amounts.`);
   }
   
   // Check for unrealistic dates
@@ -83,6 +83,10 @@ function validateContractData(contractData: ContractData) {
     if (startYear > 2100 || endYear > 2100) {
       warnings.push(`Period ${index + 1} has unrealistic year (${startYear} or ${endYear}). Please check date format.`);
     }
+    
+    if (startYear < 2020) {
+      warnings.push(`Period ${index + 1} has year in the past (${startYear}). Please check date.`);
+    }
   });
   
   return { valid: true, warnings };
@@ -91,37 +95,46 @@ function validateContractData(contractData: ContractData) {
 function calculateASC606(contractData: ContractData, discountRate: number, licensePct: number) {
   const supportPct = 1 - licensePct;
   const periods = contractData.periods;
+  const paymentDate = new Date(contractData.payment_date);
   
-  // The cash_received is the PRESENT VALUE (what was paid upfront)
-  // The stated amounts are what the customer would have paid over time
-  const cashReceived = contractData.cash_received;
+  // ASC 606 Logic:
+  // Customer pays cash upfront for services to be delivered over time
+  // We discount each period's stated amount to the END of that service period
+  // The sum of discounted amounts = Present Value of performance obligations
+  // Financing Component = Cash Received - Present Value
+  
   const statedTotal = periods.reduce((sum, p) => sum + p.stated_amount, 0);
   
-  // Present Value = Cash Received (what was actually paid upfront)
-  // Financing Component = Stated Total - Present Value
-  const totalPV = cashReceived;
-  const financingComponent = statedTotal - cashReceived;
-  const financingPercentage = financingComponent / statedTotal;
-  const isSignificant = financingPercentage > 0.05;
-  
-  // Calculate PV analysis per period for documentation
+  // Calculate PV by discounting each period to the END of its service period
+  let totalPV = 0;
   const pvAnalysis = periods.map((period, index) => {
-    const years = index + 1;
     const stated = period.stated_amount;
-    // Discount each period's stated amount to present value
-    const pv = stated / Math.pow(1 + discountRate, years);
+    const periodEnd = new Date(period.end);
+    
+    // Calculate years from payment date to END of service period
+    const yearsToEnd = (periodEnd.getTime() - paymentDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+    
+    // Discount the stated amount from the end of service period back to payment date
+    const pv = stated / Math.pow(1 + discountRate, yearsToEnd);
     const financing = stated - pv;
+    
+    totalPV += pv;
     
     return {
       period: index + 1,
       start: period.start,
       end: period.end,
       stated_amount: stated,
-      years_discounted: years,
+      years_discounted: Math.round(yearsToEnd * 100) / 100,
       present_value: Math.round(pv * 100) / 100,
       financing_component: Math.round(financing * 100) / 100
     };
   });
+  
+  // Financing component = Cash paid upfront - PV of future obligations
+  const financingComponent = contractData.cash_received - totalPV;
+  const financingPercentage = financingComponent / contractData.cash_received;
+  const isSignificant = Math.abs(financingPercentage) > 0.05;
 
   // Allocate to License and Support
   const licenseRevenue = totalPV * licensePct;
@@ -159,6 +172,7 @@ function calculateASC606(contractData: ContractData, discountRate: number, licen
 
   return {
     stated_total: statedTotal,
+    cash_received: contractData.cash_received,
     present_value: Math.round(totalPV * 100) / 100,
     financing_component: Math.round(financingComponent * 100) / 100,
     financing_percentage: financingPercentage,
