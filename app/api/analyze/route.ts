@@ -95,45 +95,44 @@ function validateContractData(contractData: ContractData) {
 function calculateASC606(contractData: ContractData, discountRate: number, licensePct: number) {
   const supportPct = 1 - licensePct;
   const periods = contractData.periods;
-  const paymentDate = new Date(contractData.payment_date);
   
-  // ASC 606 Logic:
-  // Customer pays cash upfront for services to be delivered over time
-  // We discount each period's stated amount to the END of that service period
-  // The sum of discounted amounts = Present Value of performance obligations
-  // Financing Component = Cash Received - Present Value
+  // ASC 606 Logic (matching Python implementation):
+  // Use integer years (1, 2, 3, 4, 5) for cleaner calculation
+  // Discount each period's stated amount to present value
+  // Total Financing = Sum of (Stated - PV) for each period
   
   const statedTotal = periods.reduce((sum, p) => sum + p.stated_amount, 0);
   
-  // Calculate PV by discounting each period to the END of its service period
+  // Calculate PV using simple integer years (like Python code)
   let totalPV = 0;
+  let totalFinancingFromPeriods = 0;
+  
   const pvAnalysis = periods.map((period, index) => {
     const stated = period.stated_amount;
-    const periodEnd = new Date(period.end);
+    const years = index + 1; // Simple: 1, 2, 3, 4, 5...
     
-    // Calculate years from payment date to END of service period
-    const yearsToEnd = (periodEnd.getTime() - paymentDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-    
-    // Discount the stated amount from the end of service period back to payment date
-    const pv = stated / Math.pow(1 + discountRate, yearsToEnd);
+    // PV = Stated / (1 + rate)^years
+    const pv = stated / Math.pow(1 + discountRate, years);
     const financing = stated - pv;
     
     totalPV += pv;
+    totalFinancingFromPeriods += financing;
     
     return {
-      period: index + 1,
+      period: years,
       start: period.start,
       end: period.end,
       stated_amount: stated,
-      years_discounted: Math.round(yearsToEnd * 100) / 100,
+      years_discounted: years,
       present_value: Math.round(pv * 100) / 100,
       financing_component: Math.round(financing * 100) / 100
     };
   });
   
-  // Financing component = Cash paid upfront - PV of future obligations
-  const financingComponent = contractData.cash_received - totalPV;
-  const financingPercentage = financingComponent / contractData.cash_received;
+  // Total financing component is the sum of financing from all periods
+  // This should equal: Stated Total - Total PV
+  const financingComponent = statedTotal - totalPV;
+  const financingPercentage = financingComponent / statedTotal;
   const isSignificant = Math.abs(financingPercentage) > 0.05;
 
   // Allocate to License and Support
