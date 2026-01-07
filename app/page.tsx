@@ -397,7 +397,7 @@ export default function Home() {
     const schedule = results.results.amortization_schedule
     
     // Create CSV with headers
-    const headers = ['Month', 'Period', 'Opening Deferred Revenue', 'Interest Income', 'Support Revenue', 'Closing Deferred Revenue']
+    const headers = ['Month', 'Period', 'Opening Def Rev', 'Opening Discount (Contra)', 'Opening Net Liability', 'Support Revenue', 'Interest Income', 'Closing Def Rev', 'Closing Discount', 'Closing Net Liability']
     const rows = [headers.join(',')]
 
     // Add data rows
@@ -405,10 +405,14 @@ export default function Home() {
       rows.push([
         row.month,
         row.period,
-        row.opening_balance,
-        row.interest_income,
+        row.opening_deferred_revenue,
+        row.opening_contra_liability,
+        row.opening_net_liability,
         row.support_revenue,
-        row.closing_balance
+        row.interest_income,
+        row.closing_deferred_revenue,
+        row.closing_contra_liability,
+        row.closing_net_liability
       ].join(','))
     })
 
@@ -418,9 +422,9 @@ export default function Home() {
     
     rows.push('')
     rows.push('Summary')
-    rows.push(['Total Support Revenue', '', '', '', Math.round(totalSupport * 100) / 100, ''].join(','))
-    rows.push(['Total Interest Income', '', '', Math.round(totalInterest * 100) / 100, '', ''].join(','))
-    rows.push(['Grand Total', '', '', Math.round(totalInterest * 100) / 100, Math.round(totalSupport * 100) / 100, ''].join(','))
+    rows.push(['Total Support Revenue', '', '', '', '', Math.round(totalSupport * 100) / 100, '', '', '', ''].join(','))
+    rows.push(['Total Interest Income', '', '', '', '', '', Math.round(totalInterest * 100) / 100, '', '', ''].join(','))
+    rows.push(['Verification: Support + Interest', '', '', '', '', Math.round(totalSupport * 100) / 100, Math.round(totalInterest * 100) / 100, '', '', ''].join(','))
 
     const csvContent = rows.join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })

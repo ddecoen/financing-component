@@ -241,25 +241,31 @@ function generateJournalEntries(
   // Monthly rate = (1 + annual rate)^(1/12) - 1
   const monthlyRate = Math.pow(1 + discountRate, 1/12) - 1;
 
-  // Entry 1: Day 1 - Record cash receipt and deferred revenue
+  // Entry 1: Day 0 - Record cash receipt with deferred revenue and contra-liability
+  // DR: Cash $2,100,000
+  // CR: Deferred Revenue $2,100,000
+  // DR: Discount on Deferred Revenue (Contra-Liability) $330,805
+  // CR: Discount on Deferred Revenue (Contra-Liability) is a debit to offset
+  // Net Contract Liability = $2,100,000 - $330,805 = $1,769,195 (the PV)
   entries.push({
     entry_num: 1,
     date: new Date(contractData.payment_date),
-    description: `Day 1 - Cash receipt and deferred revenue - ${contractData.customer}`,
+    description: `Day 0 - Cash receipt and deferred revenue - ${contractData.customer}`,
     debits: [
-      { account: 'Accounts Receivable (or Cash)', amount: cashReceived }
+      { account: 'Cash', amount: Math.round(cashReceived * 100) / 100 },
+      { account: 'Discount on Deferred Revenue (Contra-Liability)', amount: Math.round(financingComponent * 100) / 100 }
     ],
     credits: [
-      { account: 'Deferred Revenue', amount: cashReceived }
+      { account: 'Deferred Revenue', amount: Math.round(cashReceived * 100) / 100 }
     ]
   });
 
-  // Entry 2: Day 1 - Recognize License Revenue (20% of transaction price)
+  // Entry 2: Day 0 - Recognize License Revenue (20% of transaction price/PV)
   const licenseAmount = totalPV * 0.20;
   entries.push({
     entry_num: 2,
     date: new Date(contractData.payment_date),
-    description: `Day 1 - Recognize License Revenue (20% of transaction price)`,
+    description: `Day 0 - Recognize License Revenue (20% of transaction price)`,
     debits: [
       { account: 'Deferred Revenue', amount: Math.round(licenseAmount * 100) / 100 }
     ],
@@ -269,19 +275,19 @@ function generateJournalEntries(
   });
 
   // Calculate support revenue recognized per month (straight-line)
+  // Support = 80% of PV, recognized over 60 months
   const monthlySupportRevenue = (totalPV * 0.80) / totalMonths;
   
-  // Track contract liability (deferred revenue) balance for effective interest calculation
-  // 
-  // Day 1: Contract liability = $2,100,000
-  // Day 1 (after license): Contract liability = $2,100,000 - $353,839 = $1,746,161
-  // 
-  // Then each month:
-  // Interest Income = Opening Deferred Revenue × Monthly Rate
-  // Ending Deferred Revenue = Opening + Interest - Support Revenue
-  //
-  // The interest ACCRETES to the liability, then support revenue reduces it
-  let contractLiability = cashReceived - licenseAmount;  // Start AFTER license recognition
+  // Track balances separately:
+  // 1. Deferred Revenue (gross liability) - reduces as we recognize revenue
+  // 2. Discount on Deferred Revenue (contra-liability) - reduces as we recognize interest
+  
+  // After Day 0 license recognition:
+  let deferredRevenue = cashReceived - licenseAmount;  // $1,746,161
+  let contraLiability = financingComponent;  // $330,805 (debit balance)
+  
+  // Net Contract Liability = Deferred Revenue - Contra-Liability
+  // = $1,746,161 - $330,805 = $1,415,356 (remaining support PV)
   
   // Store amortization schedule for transparency
   const amortizationSchedule = [];
@@ -296,34 +302,43 @@ function generateJournalEntries(
     const periodNum = Math.ceil(month / monthsPerPeriod);
     const monthInPeriod = ((month - 1) % monthsPerPeriod) + 1;
 
-    // Calculate interest income using effective interest method
-    // Interest = Opening Deferred Revenue × Monthly Rate
-    const monthlyInterestIncome = contractLiability * monthlyRate;
+    // Calculate interest using effective interest method
+    // Interest = Opening Contra-Liability Balance × Monthly Rate
+    const monthlyInterestIncome = contraLiability * monthlyRate;
 
-    // Store opening balance before any changes this month
-    const openingBalance = contractLiability;
+    // Store opening balances
+    const openingDeferredRevenue = deferredRevenue;
+    const openingContraLiability = contraLiability;
+    const openingNetLiability = deferredRevenue - contraLiability;
 
-    // Interest ACCRETES to the liability (increases it)
-    contractLiability = contractLiability + monthlyInterestIncome;
-
-    // Support revenue REDUCES the liability
-    contractLiability = contractLiability - monthlySupportRevenue;
+    // Reduce deferred revenue by support revenue recognized
+    deferredRevenue = deferredRevenue - monthlySupportRevenue;
+    
+    // Reduce contra-liability (debit balance) by interest income recognized
+    contraLiability = contraLiability - monthlyInterestIncome;
+    
+    // Net liability after this month
+    const closingNetLiability = deferredRevenue - contraLiability;
 
     // Store in amortization schedule
     amortizationSchedule.push({
       month,
       period: periodNum,
-      opening_balance: Math.round(openingBalance * 100) / 100,
-      interest_income: Math.round(monthlyInterestIncome * 100) / 100,
+      opening_deferred_revenue: Math.round(openingDeferredRevenue * 100) / 100,
+      opening_contra_liability: Math.round(openingContraLiability * 100) / 100,
+      opening_net_liability: Math.round(openingNetLiability * 100) / 100,
       support_revenue: Math.round(monthlySupportRevenue * 100) / 100,
-      closing_balance: Math.round(contractLiability * 100) / 100
+      interest_income: Math.round(monthlyInterestIncome * 100) / 100,
+      closing_deferred_revenue: Math.round(deferredRevenue * 100) / 100,
+      closing_contra_liability: Math.round(contraLiability * 100) / 100,
+      closing_net_liability: Math.round(closingNetLiability * 100) / 100
     });
 
     // Monthly Support Revenue Recognition (straight-line)
     entries.push({
       entry_num: entries.length + 1,
       date: entryDate,
-      description: `Month ${month} (Period ${periodNum}, Month ${monthInPeriod}) - Support Revenue Recognition`,
+      description: `Month ${month} (Year ${periodNum}, Mo ${monthInPeriod}) - Support Revenue Recognition`,
       debits: [
         { account: 'Deferred Revenue', amount: Math.round(monthlySupportRevenue * 100) / 100 }
       ],
@@ -333,13 +348,14 @@ function generateJournalEntries(
     });
 
     // Monthly Interest Income Recognition (effective interest method)
-    // Note: Interest ACCRETES to the liability, then gets recognized
+    // DR: Discount on Deferred Revenue (reduces the contra-liability)
+    // CR: Interest Income
     entries.push({
       entry_num: entries.length + 1,
       date: entryDate,
-      description: `Month ${month} (Period ${periodNum}, Month ${monthInPeriod}) - Interest Income (Effective Interest Method)`,
+      description: `Month ${month} (Year ${periodNum}, Mo ${monthInPeriod}) - Interest Income (Effective Interest Method)`,
       debits: [
-        { account: 'Deferred Revenue (Contract Liability)', amount: Math.round(monthlyInterestIncome * 100) / 100 }
+        { account: 'Discount on Deferred Revenue (Contra-Liability)', amount: Math.round(monthlyInterestIncome * 100) / 100 }
       ],
       credits: [
         { account: 'Interest Income', amount: Math.round(monthlyInterestIncome * 100) / 100 }
