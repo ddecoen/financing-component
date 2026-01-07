@@ -158,7 +158,7 @@ function calculateASC606(contractData: ContractData, discountRate: number, licen
     'Support'
   );
 
-  // Generate journal entries (simplified)
+  // Generate journal entries with effective interest method
   const journalEntries = generateJournalEntries(
     contractData,
     totalPV,
@@ -166,7 +166,8 @@ function calculateASC606(contractData: ContractData, discountRate: number, licen
     licenseRevenue,
     supportRevenue,
     licenseSchedule,
-    supportSchedule
+    supportSchedule,
+    discountRate
   );
 
   return {
@@ -226,13 +227,18 @@ function generateJournalEntries(
   licenseRevenue: number,
   supportRevenue: number,
   licenseSchedule: any[],
-  supportSchedule: any[]
+  supportSchedule: any[],
+  discountRate: number
 ) {
   const entries = [];
   const cashReceived = contractData.cash_received;
   const numPeriods = contractData.periods.length;
   const monthsPerPeriod = 12;
   const totalMonths = numPeriods * monthsPerPeriod;
+
+  // Calculate monthly interest rate using compound interest formula
+  // Monthly rate = (1 + annual rate)^(1/12) - 1
+  const monthlyRate = Math.pow(1 + discountRate, 1/12) - 1;
 
   // Entry 1: Day 1 - Record cash receipt and deferred revenue
   entries.push({
@@ -248,7 +254,7 @@ function generateJournalEntries(
   });
 
   // Entry 2: Day 1 - Recognize License Revenue (20% of transaction price)
-  const licenseAmount = totalPV * 0.20; // License is 20% of PV (transaction price)
+  const licenseAmount = totalPV * 0.20;
   entries.push({
     entry_num: 2,
     date: new Date(contractData.payment_date),
@@ -261,13 +267,17 @@ function generateJournalEntries(
     ]
   });
 
-  // Monthly entries for Support Revenue (80% of PV recognized ratably)
+  // Calculate support revenue recognized per month (straight-line)
   const monthlySupportRevenue = (totalPV * 0.80) / totalMonths;
   
-  // Monthly entries for Interest Income (financing component recognized over time)
-  const monthlyInterestIncome = financingComponent / totalMonths;
+  // Track contract liability balance for effective interest calculation
+  // Initial balance = Cash received - License revenue recognized
+  let contractLiability = cashReceived - licenseAmount;
+  
+  // Store amortization schedule for transparency
+  const amortizationSchedule = [];
 
-  // Generate monthly entries for each month of the contract
+  // Generate monthly entries using effective interest method
   const startDate = new Date(contractData.payment_date);
   
   for (let month = 1; month <= totalMonths; month++) {
@@ -277,7 +287,11 @@ function generateJournalEntries(
     const periodNum = Math.ceil(month / monthsPerPeriod);
     const monthInPeriod = ((month - 1) % monthsPerPeriod) + 1;
 
-    // Monthly Support Revenue Recognition
+    // Calculate interest income using effective interest method
+    // Interest = Opening Contract Liability × Monthly Rate
+    const monthlyInterestIncome = contractLiability * monthlyRate;
+
+    // Monthly Support Revenue Recognition (straight-line)
     entries.push({
       entry_num: entries.length + 1,
       date: entryDate,
@@ -290,11 +304,11 @@ function generateJournalEntries(
       ]
     });
 
-    // Monthly Interest Income Recognition
+    // Monthly Interest Income Recognition (effective interest method)
     entries.push({
       entry_num: entries.length + 1,
       date: entryDate,
-      description: `Month ${month} (Period ${periodNum}, Month ${monthInPeriod}) - Interest Income Recognition`,
+      description: `Month ${month} (Period ${periodNum}, Month ${monthInPeriod}) - Interest Income (Effective Interest Method)`,
       debits: [
         { account: 'Deferred Revenue (Contract Liability)', amount: Math.round(monthlyInterestIncome * 100) / 100 }
       ],
@@ -302,6 +316,21 @@ function generateJournalEntries(
         { account: 'Interest Income', amount: Math.round(monthlyInterestIncome * 100) / 100 }
       ]
     });
+
+    // Store in amortization schedule
+    amortizationSchedule.push({
+      month,
+      period: periodNum,
+      opening_balance: Math.round(contractLiability * 100) / 100,
+      support_revenue: Math.round(monthlySupportRevenue * 100) / 100,
+      interest_income: Math.round(monthlyInterestIncome * 100) / 100,
+      total_reduction: Math.round((monthlySupportRevenue + monthlyInterestIncome) * 100) / 100,
+      closing_balance: Math.round((contractLiability - monthlySupportRevenue - monthlyInterestIncome) * 100) / 100
+    });
+
+    // Update contract liability balance
+    // Reduce by support revenue and interest income recognized
+    contractLiability = contractLiability - monthlySupportRevenue - monthlyInterestIncome;
   }
 
   return entries;
