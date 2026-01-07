@@ -279,12 +279,11 @@ function generateJournalEntries(
     ]
   });
 
-  // NOTE: We don't record a separate Day 0 license entry
-  // Instead, license will be shown in Month 1 of the amortization schedule
-  const licenseAmount = licenseRevenuePV;
+  // Calculate license and support amounts for journal entries
+  const licenseAmount = licenseRevenue;  // Already calculated above as totalPV * licensePct
 
   // Calculate support revenue recognized per month (straight-line)
-  const monthlySupportRevenue = supportRevenuePV / totalMonths;
+  const monthlySupportRevenue = supportRevenue / totalMonths;
   
   // CORRECT ACCOUNTING TREATMENT (Contra-Liability Method):
   //
