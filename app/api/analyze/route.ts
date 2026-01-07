@@ -315,17 +315,16 @@ function generateJournalEntries(
     const periodNum = Math.ceil(month / monthsPerPeriod);
     const monthInPeriod = ((month - 1) % monthsPerPeriod) + 1;
 
-    // Calculate NET contract liability
-    netLiability = deferredRevenue - discount;
+    // Calculate NET contract liability (opening balance for this month)
+    const openingNetLiability = deferredRevenue - discount;
 
     // Calculate interest using effective interest method
     // Interest = Opening NET Contract Liability × Monthly Rate
-    const monthlyInterestIncome = netLiability * monthlyRate;
+    const monthlyInterestIncome = openingNetLiability * monthlyRate;
 
     // Store opening balances
     const openingDeferredRevenue = deferredRevenue;
     const openingDiscount = discount;
-    const openingNetLiability = netLiability;
 
     // Reduce deferred revenue by support revenue recognized
     deferredRevenue = deferredRevenue - monthlySupportRevenue;
