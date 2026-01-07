@@ -149,8 +149,12 @@ function calculateASC606(contractData: ContractData, discountRate: number, licen
   });
 
   // Step 2: Allocate PV 20/80
-  const licenseRevenue = totalPV * licensePct;  // 20% of PV
-  const supportRevenue = totalPV * supportPct;  // 80% of PV
+  const licenseRevenuePV = totalPV * licensePct;  // 20% of PV
+  const supportRevenuePV = totalPV * supportPct;  // 80% of PV
+  
+  // For backwards compatibility with results display
+  const licenseRevenue = licenseRevenuePV;
+  const supportRevenue = supportRevenuePV;
   
   // For display purposes only (not used in accounting)
   const licenseFinancing = financingComponent * licensePct;
