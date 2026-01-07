@@ -216,7 +216,7 @@ function generateAmortizationSchedule(
   const financingPerPeriod = totalFinancing / periods.length;
 
   for (let i = 0; i < periods.length; i++) {
-    const interestIncome = carryingValue * rate / periods.length;
+    const interestIncomeCalc = carryingValue * rate / periods.length;
     const revenueRecognized = (initialRevenue / periods.length);
     
     schedule.push({
@@ -225,12 +225,12 @@ function generateAmortizationSchedule(
       end_date: periods[i].end,
       beginning_balance: Math.round(carryingValue * 100) / 100,
       revenue_recognized: Math.round(revenueRecognized * 100) / 100,
-      interest_income: Math.round(interestIncome * 100) / 100,
-      ending_balance: Math.round((carryingValue - revenueRecognized + interestIncome) * 100) / 100,
+      interest_income: Math.round(interestIncomeCalc * 100) / 100,
+      ending_balance: Math.round((carryingValue - revenueRecognized + interestIncomeCalc) * 100) / 100,
       type
     });
 
-    carryingValue = carryingValue - revenueRecognized + interestIncome;
+    carryingValue = carryingValue - revenueRecognized + interestIncomeCalc;
   }
 
   return schedule;
