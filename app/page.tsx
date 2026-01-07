@@ -418,16 +418,16 @@ export default function Home() {
 
     // Add summary at the end
     const totalLicense = schedule.reduce((sum: number, row: any) => sum + (row.license_revenue || 0), 0)
-    const totalSupport = schedule.reduce((sum: number, row: any) => sum + row.support_revenue, 0)
-    const totalInterest = schedule.reduce((sum: number, row: any) => sum + row.interest_expense, 0)
+    const totalSupport = schedule.reduce((sum: number, row: any) => sum + (row.support_revenue || 0), 0)
+    const totalInterest = schedule.reduce((sum: number, row: any) => sum + (row.interest_expense || 0), 0)
     
     rows.push('')
     rows.push('SUMMARY')
     rows.push(['Total License Revenue', '', '', '', '', Math.round(totalLicense * 100) / 100, '', '', '', '', ''].join(','))
     rows.push(['Total Support Revenue', '', '', '', '', '', Math.round(totalSupport * 100) / 100, '', '', '', ''].join(','))
     rows.push(['Total Interest Expense', '', '', '', '', '', '', Math.round(totalInterest * 100) / 100, '', '', ''].join(','))
-    rows.push(['Total Revenue (License + Support)', '', '', '', '', '', '', '', Math.round((totalLicense + totalSupport) * 100) / 100, '', ''].join(','))
-    rows.push(['Revenue + Interest = Cash', '', '', '', '', '', '', '', Math.round((totalLicense + totalSupport + totalInterest) * 100) / 100, '', ''].join(','))
+    rows.push(['Total Revenue (License + Support)', '', '', '', Math.round((totalLicense + totalSupport) * 100) / 100, '', '', '', '', '', ''].join(','))
+    rows.push(['Revenue + Interest = Cash', '', '', '', Math.round((totalLicense + totalSupport + totalInterest) * 100) / 100, '', '', '', '', '', ''].join(','))
 
     const csvContent = rows.join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
