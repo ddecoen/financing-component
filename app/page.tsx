@@ -388,6 +388,48 @@ export default function Home() {
     URL.revokeObjectURL(url)
   }
 
+  const downloadAmortizationSchedule = () => {
+    if (!results?.results?.amortization_schedule) {
+      alert('No amortization schedule available')
+      return
+    }
+
+    const schedule = results.results.amortization_schedule
+    
+    // Create CSV with headers
+    const headers = ['Month', 'Period', 'Opening Balance', 'Support Revenue', 'Interest Income', 'Total Reduction', 'Closing Balance']
+    const rows = [headers.join(',')]
+
+    // Add data rows
+    schedule.forEach((row: any) => {
+      rows.push([
+        row.month,
+        row.period,
+        row.opening_balance,
+        row.support_revenue,
+        row.interest_income,
+        row.total_reduction,
+        row.closing_balance
+      ].join(','))
+    })
+
+    // Add summary at the end
+    const totalSupport = schedule.reduce((sum: number, row: any) => sum + row.support_revenue, 0)
+    const totalInterest = schedule.reduce((sum: number, row: any) => sum + row.interest_income, 0)
+    
+    rows.push('')
+    rows.push(['TOTALS', '', '', Math.round(totalSupport * 100) / 100, Math.round(totalInterest * 100) / 100, '', ''].join(','))
+
+    const csvContent = rows.join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'Interest_Amortization_Waterfall.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <main className="min-h-screen p-8 bg-gradient-to-b from-gray-50 to-gray-100">
       <div className="max-w-6xl mx-auto">
@@ -565,6 +607,12 @@ export default function Home() {
                     className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition"
                   >
                     📝 Download Journal Entries CSV ({results.results.journal_entries?.length || 0} entries)
+                  </button>
+                  <button
+                    onClick={downloadAmortizationSchedule}
+                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition"
+                  >
+                    📉 Download Interest Amortization Waterfall ({results.results.amortization_schedule?.length || 0} months)
                   </button>
                 </div>
               </div>

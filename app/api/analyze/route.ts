@@ -159,7 +159,7 @@ function calculateASC606(contractData: ContractData, discountRate: number, licen
   );
 
   // Generate journal entries with effective interest method
-  const journalEntries = generateJournalEntries(
+  const { entries: journalEntries, amortizationSchedule } = generateJournalEntries(
     contractData,
     totalPV,
     financingComponent,
@@ -184,7 +184,8 @@ function calculateASC606(contractData: ContractData, discountRate: number, licen
     pv_analysis: pvAnalysis,
     license_schedule: licenseSchedule,
     support_schedule: supportSchedule,
-    journal_entries: journalEntries
+    journal_entries: journalEntries,
+    amortization_schedule: amortizationSchedule
   };
 }
 
@@ -333,7 +334,8 @@ function generateJournalEntries(
     contractLiability = contractLiability - monthlySupportRevenue - monthlyInterestIncome;
   }
 
-  return entries;
+  // Return both entries and amortization schedule
+  return { entries, amortizationSchedule };
 }
 
 export async function OPTIONS(request: NextRequest) {
