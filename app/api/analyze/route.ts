@@ -279,10 +279,6 @@ function generateJournalEntries(
   // Instead, license will be shown in Month 1 of the amortization schedule
   const licenseAmount = licenseRevenuePV;
 
-  // Step 2: Allocate PV to license and support
-  const licenseRevenuePV = totalPV * licensePct;  // 20% of PV recognized at inception
-  const supportRevenuePV = totalPV * supportPct;  // 80% of PV recognized over 60 months
-  
   // Calculate support revenue recognized per month (straight-line)
   const monthlySupportRevenue = supportRevenuePV / totalMonths;
   
