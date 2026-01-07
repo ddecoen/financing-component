@@ -272,14 +272,18 @@ function generateJournalEntries(
   const monthlySupportRevenue = (totalPV * 0.80) / totalMonths;
   
   // Track contract liability balance for effective interest calculation
-  // Initial balance after Day 1 = Cash received - License revenue recognized
-  // This includes BOTH the remaining support revenue (PV portion) AND the financing component
-  let contractLiability = cashReceived - licenseAmount;
+  // CRITICAL: Interest is calculated on the FULL contract liability
+  // Even though we recognize license revenue on Day 1, the financing component
+  // exists on the ENTIRE $2.1M payment (time value of money on full amount)
+  // 
+  // Contract liability for interest calculation = Cash received (don't subtract license!)
+  // The license is recognized as revenue, but the financing component still applies to it
+  let contractLiability = cashReceived;  // Start with FULL amount
   
-  // Note: Contract liability = Support PV remaining + Financing component
-  // As we recognize support revenue, we reduce the PV portion
-  // As we recognize interest income, we reduce the financing portion
-  // The interest is calculated on the TOTAL contract liability (both components)
+  // We'll reduce this balance as we recognize:
+  // 1. License revenue (Day 1 - but this doesn't affect interest calc)
+  // 2. Support revenue (monthly)
+  // 3. Interest income (monthly)
   
   // Store amortization schedule for transparency
   const amortizationSchedule = [];
@@ -324,20 +328,24 @@ function generateJournalEntries(
       ]
     });
 
+    // For month 1, we need to account for license already recognized on Day 1
+    const licenseReduction = month === 1 ? licenseAmount : 0;
+    
     // Store in amortization schedule
     amortizationSchedule.push({
       month,
       period: periodNum,
       opening_balance: Math.round(contractLiability * 100) / 100,
+      license_revenue: month === 1 ? Math.round(licenseAmount * 100) / 100 : 0,
       support_revenue: Math.round(monthlySupportRevenue * 100) / 100,
       interest_income: Math.round(monthlyInterestIncome * 100) / 100,
-      total_reduction: Math.round((monthlySupportRevenue + monthlyInterestIncome) * 100) / 100,
-      closing_balance: Math.round((contractLiability - monthlySupportRevenue - monthlyInterestIncome) * 100) / 100
+      total_reduction: Math.round((licenseReduction + monthlySupportRevenue + monthlyInterestIncome) * 100) / 100,
+      closing_balance: Math.round((contractLiability - licenseReduction - monthlySupportRevenue - monthlyInterestIncome) * 100) / 100
     });
 
     // Update contract liability balance
-    // Reduce by support revenue and interest income recognized
-    contractLiability = contractLiability - monthlySupportRevenue - monthlyInterestIncome;
+    // Reduce by license (month 1 only), support revenue, and interest income
+    contractLiability = contractLiability - licenseReduction - monthlySupportRevenue - monthlyInterestIncome;
   }
 
   // Return both entries and amortization schedule

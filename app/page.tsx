@@ -397,7 +397,7 @@ export default function Home() {
     const schedule = results.results.amortization_schedule
     
     // Create CSV with headers
-    const headers = ['Month', 'Period', 'Opening Balance', 'Support Revenue', 'Interest Income', 'Total Reduction', 'Closing Balance']
+    const headers = ['Month', 'Period', 'Opening Balance', 'License Revenue', 'Support Revenue', 'Interest Income', 'Total Reduction', 'Closing Balance']
     const rows = [headers.join(',')]
 
     // Add data rows
@@ -406,6 +406,7 @@ export default function Home() {
         row.month,
         row.period,
         row.opening_balance,
+        row.license_revenue || '',
         row.support_revenue,
         row.interest_income,
         row.total_reduction,
@@ -414,11 +415,12 @@ export default function Home() {
     })
 
     // Add summary at the end
+    const totalLicense = schedule.reduce((sum: number, row: any) => sum + (row.license_revenue || 0), 0)
     const totalSupport = schedule.reduce((sum: number, row: any) => sum + row.support_revenue, 0)
     const totalInterest = schedule.reduce((sum: number, row: any) => sum + row.interest_income, 0)
     
     rows.push('')
-    rows.push(['TOTALS', '', '', Math.round(totalSupport * 100) / 100, Math.round(totalInterest * 100) / 100, '', ''].join(','))
+    rows.push(['TOTALS', '', '', Math.round(totalLicense * 100) / 100, Math.round(totalSupport * 100) / 100, Math.round(totalInterest * 100) / 100, '', ''].join(','))
 
     const csvContent = rows.join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
