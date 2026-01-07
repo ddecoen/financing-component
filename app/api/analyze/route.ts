@@ -272,8 +272,14 @@ function generateJournalEntries(
   const monthlySupportRevenue = (totalPV * 0.80) / totalMonths;
   
   // Track contract liability balance for effective interest calculation
-  // Initial balance = Cash received - License revenue recognized
+  // Initial balance after Day 1 = Cash received - License revenue recognized
+  // This includes BOTH the remaining support revenue (PV portion) AND the financing component
   let contractLiability = cashReceived - licenseAmount;
+  
+  // Note: Contract liability = Support PV remaining + Financing component
+  // As we recognize support revenue, we reduce the PV portion
+  // As we recognize interest income, we reduce the financing portion
+  // The interest is calculated on the TOTAL contract liability (both components)
   
   // Store amortization schedule for transparency
   const amortizationSchedule = [];
