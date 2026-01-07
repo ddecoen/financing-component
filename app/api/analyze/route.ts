@@ -280,14 +280,34 @@ function generateJournalEntries(
   
   // Track balances separately:
   // 1. Deferred Revenue (gross liability) - reduces as we recognize revenue
-  // 2. Discount on Deferred Revenue (contra-liability) - reduces as we recognize interest
+  // 2. Discount on Deferred Revenue (contra-liability, DR balance) - reduces as we recognize interest
+  // 3. Net Contract Liability = Deferred Revenue - Discount
   
   // After Day 0 license recognition:
   let deferredRevenue = cashReceived - licenseAmount;  // $1,746,161
-  let contraLiability = financingComponent;  // $330,805 (debit balance)
+  let discount = financingComponent;  // $330,805 (debit balance, reduces the liability)
+  let netLiability = deferredRevenue - discount;  // $1,415,356
   
-  // Net Contract Liability = Deferred Revenue - Contra-Liability
-  // = $1,746,161 - $330,805 = $1,415,356 (remaining support PV)
+  // BUT WAIT - you said opening net liability is $1,769,192.79
+  // That's the PV BEFORE license recognition!
+  // Let me recalculate:
+  
+  // Actually, starting point should be:
+  // Deferred Revenue (gross) = $2,100,000
+  // Discount (contra) = $330,805
+  // Net Liability = $2,100,000 - $330,805 = $1,769,195 ✓
+  
+  // Then after license ($353,839):
+  // Deferred Revenue = $1,746,161
+  // Discount = $330,805 (unchanged by revenue recognition)
+  // Net Liability = $1,746,161 - $330,805 = $1,415,356
+  
+  // But you're saying opening net is $1,769,193...
+  // I think the confusion is: does license recognition reduce GROSS or NET?
+  
+  // Let me use the approach where interest is calculated on NET CONTRACT LIABILITY:
+  deferredRevenue = cashReceived - licenseAmount;  // Start after license
+  discount = financingComponent;  // Discount unchanged by license
   
   // Store amortization schedule for transparency
   const amortizationSchedule = [];
@@ -302,35 +322,38 @@ function generateJournalEntries(
     const periodNum = Math.ceil(month / monthsPerPeriod);
     const monthInPeriod = ((month - 1) % monthsPerPeriod) + 1;
 
+    // Calculate NET contract liability
+    netLiability = deferredRevenue - discount;
+
     // Calculate interest using effective interest method
-    // Interest = Opening Contra-Liability Balance × Monthly Rate
-    const monthlyInterestIncome = contraLiability * monthlyRate;
+    // Interest = Opening NET Contract Liability × Monthly Rate
+    const monthlyInterestIncome = netLiability * monthlyRate;
 
     // Store opening balances
     const openingDeferredRevenue = deferredRevenue;
-    const openingContraLiability = contraLiability;
-    const openingNetLiability = deferredRevenue - contraLiability;
+    const openingDiscount = discount;
+    const openingNetLiability = netLiability;
 
     // Reduce deferred revenue by support revenue recognized
     deferredRevenue = deferredRevenue - monthlySupportRevenue;
     
-    // Reduce contra-liability (debit balance) by interest income recognized
-    contraLiability = contraLiability - monthlyInterestIncome;
+    // Reduce discount (contra-liability) by interest income recognized
+    discount = discount - monthlyInterestIncome;
     
-    // Net liability after this month
-    const closingNetLiability = deferredRevenue - contraLiability;
+    // Calculate closing balances
+    const closingNetLiability = deferredRevenue - discount;
 
     // Store in amortization schedule
     amortizationSchedule.push({
       month,
       period: periodNum,
       opening_deferred_revenue: Math.round(openingDeferredRevenue * 100) / 100,
-      opening_contra_liability: Math.round(openingContraLiability * 100) / 100,
+      opening_contra_liability: Math.round(openingDiscount * 100) / 100,
       opening_net_liability: Math.round(openingNetLiability * 100) / 100,
       support_revenue: Math.round(monthlySupportRevenue * 100) / 100,
       interest_income: Math.round(monthlyInterestIncome * 100) / 100,
       closing_deferred_revenue: Math.round(deferredRevenue * 100) / 100,
-      closing_contra_liability: Math.round(contraLiability * 100) / 100,
+      closing_contra_liability: Math.round(discount * 100) / 100,
       closing_net_liability: Math.round(closingNetLiability * 100) / 100
     });
 
