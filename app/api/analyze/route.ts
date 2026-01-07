@@ -271,19 +271,17 @@ function generateJournalEntries(
   // Calculate support revenue recognized per month (straight-line)
   const monthlySupportRevenue = (totalPV * 0.80) / totalMonths;
   
-  // Track contract liability balance for effective interest calculation
-  // CRITICAL: Interest is calculated on the FULL contract liability
-  // Even though we recognize license revenue on Day 1, the financing component
-  // exists on the ENTIRE $2.1M payment (time value of money on full amount)
+  // Track contract liability (deferred revenue) balance for effective interest calculation
   // 
-  // Contract liability for interest calculation = Cash received (don't subtract license!)
-  // The license is recognized as revenue, but the financing component still applies to it
-  let contractLiability = cashReceived;  // Start with FULL amount
-  
-  // We'll reduce this balance as we recognize:
-  // 1. License revenue (Day 1 - but this doesn't affect interest calc)
-  // 2. Support revenue (monthly)
-  // 3. Interest income (monthly)
+  // Day 1: Contract liability = $2,100,000
+  // Day 1 (after license): Contract liability = $2,100,000 - $353,839 = $1,746,161
+  // 
+  // Then each month:
+  // Interest Income = Opening Deferred Revenue × Monthly Rate
+  // Ending Deferred Revenue = Opening + Interest - Support Revenue
+  //
+  // The interest ACCRETES to the liability, then support revenue reduces it
+  let contractLiability = cashReceived - licenseAmount;  // Start AFTER license recognition
   
   // Store amortization schedule for transparency
   const amortizationSchedule = [];
@@ -299,8 +297,27 @@ function generateJournalEntries(
     const monthInPeriod = ((month - 1) % monthsPerPeriod) + 1;
 
     // Calculate interest income using effective interest method
-    // Interest = Opening Contract Liability × Monthly Rate
+    // Interest = Opening Deferred Revenue × Monthly Rate
     const monthlyInterestIncome = contractLiability * monthlyRate;
+
+    // Store opening balance before any changes this month
+    const openingBalance = contractLiability;
+
+    // Interest ACCRETES to the liability (increases it)
+    contractLiability = contractLiability + monthlyInterestIncome;
+
+    // Support revenue REDUCES the liability
+    contractLiability = contractLiability - monthlySupportRevenue;
+
+    // Store in amortization schedule
+    amortizationSchedule.push({
+      month,
+      period: periodNum,
+      opening_balance: Math.round(openingBalance * 100) / 100,
+      interest_income: Math.round(monthlyInterestIncome * 100) / 100,
+      support_revenue: Math.round(monthlySupportRevenue * 100) / 100,
+      closing_balance: Math.round(contractLiability * 100) / 100
+    });
 
     // Monthly Support Revenue Recognition (straight-line)
     entries.push({
@@ -316,6 +333,7 @@ function generateJournalEntries(
     });
 
     // Monthly Interest Income Recognition (effective interest method)
+    // Note: Interest ACCRETES to the liability, then gets recognized
     entries.push({
       entry_num: entries.length + 1,
       date: entryDate,
@@ -327,25 +345,6 @@ function generateJournalEntries(
         { account: 'Interest Income', amount: Math.round(monthlyInterestIncome * 100) / 100 }
       ]
     });
-
-    // For month 1, we need to account for license already recognized on Day 1
-    const licenseReduction = month === 1 ? licenseAmount : 0;
-    
-    // Store in amortization schedule
-    amortizationSchedule.push({
-      month,
-      period: periodNum,
-      opening_balance: Math.round(contractLiability * 100) / 100,
-      license_revenue: month === 1 ? Math.round(licenseAmount * 100) / 100 : 0,
-      support_revenue: Math.round(monthlySupportRevenue * 100) / 100,
-      interest_income: Math.round(monthlyInterestIncome * 100) / 100,
-      total_reduction: Math.round((licenseReduction + monthlySupportRevenue + monthlyInterestIncome) * 100) / 100,
-      closing_balance: Math.round((contractLiability - licenseReduction - monthlySupportRevenue - monthlyInterestIncome) * 100) / 100
-    });
-
-    // Update contract liability balance
-    // Reduce by license (month 1 only), support revenue, and interest income
-    contractLiability = contractLiability - licenseReduction - monthlySupportRevenue - monthlyInterestIncome;
   }
 
   // Return both entries and amortization schedule
