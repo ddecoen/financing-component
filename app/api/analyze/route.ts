@@ -278,36 +278,29 @@ function generateJournalEntries(
   // Support = 80% of PV, recognized over 60 months
   const monthlySupportRevenue = (totalPV * 0.80) / totalMonths;
   
-  // Track balances separately:
-  // 1. Deferred Revenue (gross liability) - reduces as we recognize revenue
-  // 2. Discount on Deferred Revenue (contra-liability, DR balance) - reduces as we recognize interest
-  // 3. Net Contract Liability = Deferred Revenue - Discount
+  // CORRECT ACCOUNTING TREATMENT (Contra-Liability Method):
+  //
+  // Day 0 Entry:
+  // DR: Cash                           $2,100,000
+  // DR: Discount on Def Rev (Contra)     $330,805
+  //     CR: Deferred Revenue                       $2,100,000
+  // Net Contract Liability = $2,100,000 - $330,805 = $1,769,195
+  //
+  // Day 0 License Recognition:
+  // DR: Deferred Revenue               $353,839
+  //     CR: License Revenue                        $353,839
+  //
+  // After Day 0:
+  // Deferred Revenue (gross): $1,746,161
+  // Discount (contra-liability): $330,805
+  // Net Contract Liability: $1,746,161 - $330,805 = $1,415,356
+  //
+  // Each Month:
+  // Interest = Opening Net Contract Liability × Monthly Rate
+  // Ending Net = Opening Net + Interest - Support Revenue
   
-  // After Day 0 license recognition:
   let deferredRevenue = cashReceived - licenseAmount;  // $1,746,161
-  let discount = financingComponent;  // $330,805 (debit balance, reduces the liability)
-  let netLiability = deferredRevenue - discount;  // $1,415,356
-  
-  // BUT WAIT - you said opening net liability is $1,769,192.79
-  // That's the PV BEFORE license recognition!
-  // Let me recalculate:
-  
-  // Actually, starting point should be:
-  // Deferred Revenue (gross) = $2,100,000
-  // Discount (contra) = $330,805
-  // Net Liability = $2,100,000 - $330,805 = $1,769,195 ✓
-  
-  // Then after license ($353,839):
-  // Deferred Revenue = $1,746,161
-  // Discount = $330,805 (unchanged by revenue recognition)
-  // Net Liability = $1,746,161 - $330,805 = $1,415,356
-  
-  // But you're saying opening net is $1,769,193...
-  // I think the confusion is: does license recognition reduce GROSS or NET?
-  
-  // Let me use the approach where interest is calculated on NET CONTRACT LIABILITY:
-  deferredRevenue = cashReceived - licenseAmount;  // Start after license
-  discount = financingComponent;  // Discount unchanged by license
+  let discount = financingComponent;  // $330,805 (DR balance)
   
   // Store amortization schedule for transparency
   const amortizationSchedule = [];
@@ -363,25 +356,25 @@ function generateJournalEntries(
       date: entryDate,
       description: `Month ${month} (Year ${periodNum}, Mo ${monthInPeriod}) - Support Revenue Recognition`,
       debits: [
-        { account: 'Deferred Revenue', amount: Math.round(monthlySupportRevenue * 100) / 100 }
+        { account: 'Deferred Revenue (Gross)', amount: Math.round(monthlySupportRevenue * 100) / 100 }
       ],
       credits: [
         { account: 'Support Revenue', amount: Math.round(monthlySupportRevenue * 100) / 100 }
       ]
     });
 
-    // Monthly Interest Income Recognition (effective interest method)
-    // DR: Discount on Deferred Revenue (reduces the contra-liability)
-    // CR: Interest Income
+    // Monthly Interest Expense (Unwind Discount - Effective Interest Method)
+    // DR: Interest Expense
+    // CR: Discount on Contract Liability (reduces the contra-liability)
     entries.push({
       entry_num: entries.length + 1,
       date: entryDate,
-      description: `Month ${month} (Year ${periodNum}, Mo ${monthInPeriod}) - Interest Income (Effective Interest Method)`,
+      description: `Month ${month} (Year ${periodNum}, Mo ${monthInPeriod}) - Interest Expense (Unwind Discount)`,
       debits: [
-        { account: 'Discount on Deferred Revenue (Contra-Liability)', amount: Math.round(monthlyInterestIncome * 100) / 100 }
+        { account: 'Interest Expense', amount: Math.round(monthlyInterestIncome * 100) / 100 }
       ],
       credits: [
-        { account: 'Interest Income', amount: Math.round(monthlyInterestIncome * 100) / 100 }
+        { account: 'Discount on Contract Liability', amount: Math.round(monthlyInterestIncome * 100) / 100 }
       ]
     });
   }
