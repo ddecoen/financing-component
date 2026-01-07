@@ -135,10 +135,12 @@ function calculateASC606(contractData: ContractData, discountRate: number, licen
   const financingPercentage = financingComponent / statedTotal;
   const isSignificant = Math.abs(financingPercentage) > 0.05;
 
-  // Allocate to License and Support
-  const licenseRevenue = totalPV * licensePct;
+  // Step 2: Allocate PV 20/80
+  const licenseRevenue = totalPV * licensePct;  // 20% of PV
+  const supportRevenue = totalPV * supportPct;  // 80% of PV
+  
+  // For display purposes only (not used in accounting)
   const licenseFinancing = financingComponent * licensePct;
-  const supportRevenue = totalPV * supportPct;
   const supportFinancing = financingComponent * supportPct;
 
   // Generate amortization schedules (simplified)
