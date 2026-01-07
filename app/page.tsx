@@ -403,16 +403,17 @@ export default function Home() {
     // Add data rows
     schedule.forEach((row: any) => {
       rows.push([
-        row.month,
-        row.period,
-        row.opening_deferred_revenue,
-        row.opening_contra_liability,
-        row.opening_net_liability,
-        row.support_revenue,
-        row.interest_income,
-        row.closing_deferred_revenue,
-        row.closing_contra_liability,
-        row.closing_net_liability
+        row.month || '',
+        row.period || '',
+        row.opening_deferred_revenue || '',
+        row.opening_discount || '',  // Changed from opening_contra_liability
+        row.opening_net_liability || '',
+        row.license_revenue || '',
+        row.support_revenue || '',
+        row.interest_expense || '',  // Changed from interest_income
+        row.closing_deferred_revenue || '',
+        row.closing_discount || '',  // Changed from closing_contra_liability
+        row.closing_net_liability || ''
       ].join(','))
     })
 
