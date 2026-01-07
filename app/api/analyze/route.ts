@@ -275,23 +275,16 @@ function generateJournalEntries(
     ]
   });
 
-  // Entry 2: Day 0 - Recognize License Revenue (20% of transaction price/PV)
-  const licenseAmount = totalPV * 0.20;
-  entries.push({
-    entry_num: 2,
-    date: new Date(contractData.payment_date),
-    description: `Day 0 - Recognize License Revenue (20% of transaction price)`,
-    debits: [
-      { account: 'Deferred Revenue', amount: Math.round(licenseAmount * 100) / 100 }
-    ],
-    credits: [
-      { account: 'License Revenue', amount: Math.round(licenseAmount * 100) / 100 }
-    ]
-  });
+  // NOTE: We don't record a separate Day 0 license entry
+  // Instead, license will be shown in Month 1 of the amortization schedule
+  const licenseAmount = licenseRevenuePV;
 
+  // Step 2: Allocate PV to license and support
+  const licenseRevenuePV = totalPV * licensePct;  // 20% of PV recognized at inception
+  const supportRevenuePV = totalPV * supportPct;  // 80% of PV recognized over 60 months
+  
   // Calculate support revenue recognized per month (straight-line)
-  // Support = 80% of PV, recognized over 60 months
-  const monthlySupportRevenue = (totalPV * 0.80) / totalMonths;
+  const monthlySupportRevenue = supportRevenuePV / totalMonths;
   
   // CORRECT ACCOUNTING TREATMENT (Contra-Liability Method):
   //
@@ -305,16 +298,20 @@ function generateJournalEntries(
   // DR: Deferred Revenue               $353,839
   //     CR: License Revenue                        $353,839
   //
-  // After Day 0:
-  // Deferred Revenue (gross): $1,746,161
+  // Month 1 Opening (BEFORE any recognition):
+  // Deferred Revenue (gross): $2,100,000
   // Discount (contra-liability): $330,805
-  // Net Contract Liability: $1,746,161 - $330,805 = $1,415,356
+  // Net Contract Liability: $2,100,000 - $330,805 = $1,769,195
+  //
+  // Month 1: Recognize license, then calculate interest on REMAINING net
+  // After license: Net = $1,769,195 - $353,839 = $1,415,356
+  // Interest on $1,415,356, then recognize support
   //
   // Each Month:
   // Interest = Opening Net Contract Liability × Monthly Rate
   // Ending Net = Opening Net + Interest - Support Revenue
   
-  let deferredRevenue = cashReceived - licenseAmount;  // $1,746,161
+  let deferredRevenue = cashReceived;  // Start with FULL cash amount
   let discount = financingComponent;  // $330,805 (DR balance)
   
   // Store amortization schedule for transparency
@@ -330,21 +327,29 @@ function generateJournalEntries(
     const periodNum = Math.ceil(month / monthsPerPeriod);
     const monthInPeriod = ((month - 1) % monthsPerPeriod) + 1;
 
-    // Calculate NET contract liability (opening balance for this month)
-    const openingNetLiability = deferredRevenue - discount;
-
-    // Calculate interest using effective interest method
-    // Interest = Opening NET Contract Liability × Monthly Rate
-    const monthlyInterestIncome = openingNetLiability * monthlyRate;
-
-    // Store opening balances
+    // Store opening balances for this month
     const openingDeferredRevenue = deferredRevenue;
     const openingDiscount = discount;
+    const openingNetLiability = deferredRevenue - discount;
+
+    // Month 1 special handling: Recognize license FIRST
+    let licenseThisMonth = 0;
+    if (month === 1) {
+      licenseThisMonth = licenseAmount;
+      deferredRevenue = deferredRevenue - licenseAmount;
+    }
+    
+    // Calculate NET liability after license recognition (for interest calculation)
+    const netLiabilityForInterest = deferredRevenue - discount;
+    
+    // Calculate interest using effective interest method
+    // Interest = Net Liability (after license if month 1) × Monthly Rate
+    const monthlyInterestIncome = netLiabilityForInterest * monthlyRate;
 
     // Reduce deferred revenue by support revenue recognized
     deferredRevenue = deferredRevenue - monthlySupportRevenue;
     
-    // Reduce discount (contra-liability) by interest income recognized
+    // Reduce discount (contra-liability) by interest expense recognized
     discount = discount - monthlyInterestIncome;
     
     // Calculate closing balances
@@ -355,12 +360,13 @@ function generateJournalEntries(
       month,
       period: periodNum,
       opening_deferred_revenue: Math.round(openingDeferredRevenue * 100) / 100,
-      opening_contra_liability: Math.round(openingDiscount * 100) / 100,
+      opening_discount: Math.round(openingDiscount * 100) / 100,
       opening_net_liability: Math.round(openingNetLiability * 100) / 100,
+      license_revenue: month === 1 ? Math.round(licenseAmount * 100) / 100 : 0,
       support_revenue: Math.round(monthlySupportRevenue * 100) / 100,
-      interest_income: Math.round(monthlyInterestIncome * 100) / 100,
+      interest_expense: Math.round(monthlyInterestIncome * 100) / 100,
       closing_deferred_revenue: Math.round(deferredRevenue * 100) / 100,
-      closing_contra_liability: Math.round(discount * 100) / 100,
+      closing_discount: Math.round(discount * 100) / 100,
       closing_net_liability: Math.round(closingNetLiability * 100) / 100
     });
 
