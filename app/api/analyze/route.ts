@@ -95,28 +95,47 @@ function validateContractData(contractData: ContractData) {
 function calculateASC606(contractData: ContractData, discountRate: number, licensePct: number) {
   const supportPct = 1 - licensePct;
   const periods = contractData.periods;
-  
-  // ASC 606 Logic (matching Python implementation):
-  // Use integer years (1, 2, 3, 4, 5) for cleaner calculation
-  // Discount each period's stated amount to present value
-  // Total Financing = Sum of (Stated - PV) for each period
-  
+  const cashReceived = contractData.cash_received;
   const statedTotal = periods.reduce((sum, p) => sum + p.stated_amount, 0);
   
-  // Calculate PV using simple integer years (like Python code)
-  let totalPV = 0;
-  let totalFinancingFromPeriods = 0;
+  // GOLD STANDARD METHOD (Big 4 Preferred):
+  // Calculate PV using the SAME monthly delivery pattern as revenue recognition
   
+  // Monthly effective rate
+  const monthlyRate = Math.pow(1 + discountRate, 1/12) - 1;
+  
+  const totalMonths = periods.length * 12;  // 60 months for 5-year contract
+  
+  // Step 1a: License portion delivered at inception (Month 0) - no discounting
+  const licenseStatedAmount = statedTotal * licensePct;  // 20% of $2.1M = $420K
+  const licensePV = licenseStatedAmount;  // Delivered at t=0, so PV = stated
+  
+  // Step 1b: Support delivered end-of-month for months 1-60 - discount each payment
+  const monthlySupportStatedAmount = (statedTotal * supportPct) / totalMonths;  // 80% / 60 months
+  
+  let supportPV = 0;
+  for (let month = 1; month <= totalMonths; month++) {
+    // Discount each monthly support payment back to t=0
+    const monthlyPV = monthlySupportStatedAmount / Math.pow(1 + monthlyRate, month);
+    supportPV += monthlyPV;
+  }
+  
+  // Step 1c: Total PV = License PV (t=0) + Support PV (discounted monthly)
+  const totalPV = licensePV + supportPV;
+  
+  // Step 1d: Discount (SFC) = Cash - PV
+  const financingComponent = cashReceived - totalPV;
+  const financingPercentage = financingComponent / cashReceived;
+  const isSignificant = Math.abs(financingPercentage) > 0.05;
+  
+  // Create PV analysis for display (annual view for reference)
   const pvAnalysis = periods.map((period, index) => {
     const stated = period.stated_amount;
-    const years = index + 1; // Simple: 1, 2, 3, 4, 5...
+    const years = index + 1;
     
-    // PV = Stated / (1 + rate)^years
+    // For display purposes, show annual PV using annual discounting
     const pv = stated / Math.pow(1 + discountRate, years);
     const financing = stated - pv;
-    
-    totalPV += pv;
-    totalFinancingFromPeriods += financing;
     
     return {
       period: years,
@@ -128,12 +147,6 @@ function calculateASC606(contractData: ContractData, discountRate: number, licen
       financing_component: Math.round(financing * 100) / 100
     };
   });
-  
-  // Total financing component is the sum of financing from all periods
-  // This should equal: Stated Total - Total PV
-  const financingComponent = statedTotal - totalPV;
-  const financingPercentage = financingComponent / statedTotal;
-  const isSignificant = Math.abs(financingPercentage) > 0.05;
 
   // Step 2: Allocate PV 20/80
   const licenseRevenue = totalPV * licensePct;  // 20% of PV
