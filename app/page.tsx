@@ -396,8 +396,8 @@ export default function Home() {
 
     const schedule = results.results.amortization_schedule
     
-    // Create CSV with headers
-    const headers = ['Month', 'Period', 'Opening Def Rev', 'Opening Discount (Contra)', 'Opening Net Liability', 'Support Revenue', 'Interest Income', 'Closing Def Rev', 'Closing Discount', 'Closing Net Liability']
+    // Create CSV with headers - matching target format exactly
+    const headers = ['Month', 'Opening Net Contract Liability (PV)', 'Interest Expense', 'License Revenue', 'Support Revenue', 'Ending Net Contract Liability (PV)']
     const rows = [headers.join(',')]
 
     // Add data rows
