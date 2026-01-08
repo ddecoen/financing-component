@@ -400,19 +400,14 @@ export default function Home() {
     const headers = ['Month', 'Opening Net Contract Liability (PV)', 'Interest Expense', 'License Revenue', 'Support Revenue', 'Ending Net Contract Liability (PV)']
     const rows = [headers.join(',')]
 
-    // Add data rows
+    // Add data rows - simplified format matching target
     schedule.forEach((row: any) => {
       rows.push([
         row.month || '',
-        row.period || '',
-        row.opening_deferred_revenue || '',
-        row.opening_discount || '',  // Changed from opening_contra_liability
         row.opening_net_liability || '',
+        row.interest_expense || '',
         row.license_revenue || '',
         row.support_revenue || '',
-        row.interest_expense || '',  // Changed from interest_income
-        row.closing_deferred_revenue || '',
-        row.closing_discount || '',  // Changed from closing_contra_liability
         row.closing_net_liability || ''
       ].join(','))
     })
